@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>httpBackupGo</title>
+
+  <!-- OFFLINE: served from embedded /static -->
+  <link href="/static/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    /* Optional tiny tweaks without needing app.css yet */
+    code { user-select: all; }
+      /* hacky: code == success alert color */
+  code {
+    color: #75e3a0 !important;
+    background: rgba(25,135,84,0.18) !important;
+    border-radius: 4px;
+    padding: 2px 6px;
+    user-select: all;
+  }
+  </style>
+</head>
+
+<body class="bg-body">
+  <div class="container py-4" style="max-width: 1000px;">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+  <div class="d-flex align-items-center gap-2">
+    <div>
+      <h1 class="h3 mb-0"><img src="/static/gologo.png" alt="Go" style="height: 28px; width: auto; opacity: 0.9;"> httpBackupGo</h1>
+      <div class="text-muted small">Config path: <code>{{.ConfigPath}}</code>
+      </div>
+    </div>
+  </div>
+  <div class="text-muted small">Now: <code>{{.Now}}</code></div>
+</div>
+
+    {{if .Message}}
+      <div class="alert alert-success">{{.Message}}</div>
+    {{end}}
+    {{if .Error}}
+      <div class="alert alert-danger">{{.Error}}</div>
+    {{end}}
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <form method="post" action="/save" id="cfgForm">
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">IntervalMinutes</label>
+              <input type="number" min="1" class="form-control" name="IntervalMinutes" value="{{.Config.IntervalMinutes}}">
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Retention</label>
+              <input type="number" min="1" class="form-control" name="Retention" value="{{.Config.Retention}}">
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label">BackupFolder</label>
+              <input type="text" class="form-control" name="BackupFolder" value="{{.Config.BackupFolder}}">
+              <div class="form-text">
+                Backups are stored as:
+                <code>{{.Config.BackupFolder}}\&lt;Name&gt;\backup_&lt;Name&gt;_DD-MM-YYYY_HH-mm-ss.zip</code>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4"/>
+
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <h2 class="h5 mb-0">Sites</h2>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addRow()">+ Add</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width: 90px;">Enabled</th>
+                  <th style="width: 220px;">Name</th>
+                  <th>Url</th>
+                  <th style="width: 90px;"></th>
+                </tr>
+              </thead>
+              <tbody id="sitesBody">
+                {{range $i, $s := .Config.Sites}}
+                <tr>
+                  <td>
+                    <!-- token always present per row -->
+                    <input type="hidden" name="SiteEnabledPresent" value="row{{$i}}">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="SiteEnabled" value="row{{$i}}" {{if $s.Enabled}}checked{{end}}>
+                    </div>
+                  </td>
+                  <td>
+                    <input type="text" class="form-control form-control-sm" name="SiteName" value="{{$s.Name}}" placeholder="artimo1">
+                  </td>
+                  <td>
+                    <input type="text" class="form-control form-control-sm" name="SiteUrl" value="{{$s.Url}}" placeholder="http://localhost:81/backup.zip">
+                  </td>
+                  <td class="text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">Remove</button>
+                  </td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">Save</button>
+          </form>
+
+          <form method="post" action="/run">
+            <button type="submit" class="btn btn-outline-secondary">Run now</button>
+          </form>
+          </div>
+
+      </div>
+    </div>
+
+    <div class="text-muted small">
+      There is no place like <code>127.0.0.1:8080</code>. Keep this web server bound to it.
+    </div>
+  </div>
+
+  <script>
+    function addRow() {
+      const body = document.getElementById('sitesBody');
+      const idx = body.children.length;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <input type="hidden" name="SiteEnabledPresent" value="row${idx}">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="SiteEnabled" value="row${idx}" checked>
+          </div>
+        </td>
+        <td><input type="text" class="form-control form-control-sm" name="SiteName" placeholder="artimoX"></td>
+        <td><input type="text" class="form-control form-control-sm" name="SiteUrl" placeholder="http://localhost:81/backup.zip"></td>
+        <td class="text-end">
+          <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">Remove</button>
+        </td>
+      `;
+      body.appendChild(tr);
+    }
+
+    function removeRow(btn) {
+      const tr = btn.closest('tr');
+      tr.remove();
+    }
+  </script>
+
+  <!-- OFFLINE: served from embedded /static -->
+  <script src="/static/bootstrap.bundle.min.js"></script>
+</body>
+</html>
