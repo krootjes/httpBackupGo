@@ -1,43 +1,46 @@
-# Binaries for programs and plugins
+# -------------------------
+# Go build / tooling
+# -------------------------
 *.exe
 *.exe~
 *.dll
 *.so
 *.so.*
 *.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Output of the go coverage tool
 *.out
-
-# Go workspace file
 go.work
-
-# Dependency directories
 vendor/
 
-# IDE
+# -------------------------
+# App runtime files
+# -------------------------
+config.json
+config.json.tmp
+
+httpBackupGo/
+**/backup_*.zip
+**/backup_*.zip.tmp
+*.tmp
+*.log
+
+# -------------------------
+# Environment
+# -------------------------
+.env
+.env.local
+
+# -------------------------
+# IDE / Editor
+# -------------------------
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# -------------------------
+# OS junk
+# -------------------------
 .DS_Store
 Thumbs.db
-
-# Local environment
-.env
-.env.local
-
-# App config (runtime-generated)
-config.json
-config.json.tmp
-
-# Backup output
-httpBackupGo/Backups
-**/backup_*.zip
-**/backup_*.zip.tmp
