@@ -1,125 +1,193 @@
-# httpBackupGo
+# 🚀 httpBackupGo
 
-httpBackupGo is a small Go application that automates downloading website backups on a schedule. It supports multiple sites, a simple web UI to manage configuration and trigger runs, and concurrent downloads with a configurable limit.
+**A lightweight, offline-first HTTP backup scheduler & runner with a web UI — written in Go.**
 
-## Features
+httpBackupGo periodically downloads HTTP-accessible backup files (such as `backup.zip`),
+stores them per site with timestamped filenames, and automatically enforces a retention policy.
 
-- Concurrent downloads for multiple sites (limited by configuration / env var).
-- Configurable settings via a JSON config file (editable in the web UI).
-- Small embedded web UI to view and change configuration and trigger runs.
+---
 
-## Installation
+## ✨ Features
 
-1. Clone the repository:
-   ```powershell
-   git clone https://github.com/yourusername/httpBackupGo.git; cd httpBackupGo
-   ```
+- 🕒 Scheduled backups with configurable interval
+- 🌐 Offline web UI (no CDN, all assets embedded)
+- 📁 Per-site backup directories
+- 🗂 Retention policy (keep latest N backups per site)
+- ▶️ Run backups manually via UI
+- 🔄 Reload scheduler without restarting
+- ⚡ Parallel downloads using goroutines
+- 🧠 Live config reload (no restart needed for most changes)
+- 🛠 Simple JSON-based configuration
 
-2. Build the application:
-   ```powershell
-   go build -o httpBackupGo.exe
-   ```
+---
 
-3. Run the application:
-   ```powershell
-   .\httpBackupGo.exe
-   ```
+## 🧱 Quick Start
 
-## Configuration
+### Build & run
 
-The application uses a JSON configuration file to manage settings. By default the config path is:
+```bash
+git clone https://github.com/krootjes/httpBackupGo
+cd httpBackupGo
+go build -o httpbackupgo
+./httpbackupgo
+```
 
-- Windows: `%ProgramData%\httpBackupGo\config.json` (if `ProgramData` is set)
-- Otherwise: `config.json` next to where you run the binary
+### Open the Web UI
 
-The config contains the following fields:
+```
+http://127.0.0.1:8123
+```
 
-- `WebListenAddr` - address:port where the web UI listens (default: `127.0.0.1:8123`).
-- `IntervalMinutes` - scheduler interval in minutes (default: `5`, values <= 0 are normalized to `1`).
-- `BackupFolder` - base folder where backups are stored (default on Windows: `%ProgramData%\httpBackupGo\Backups`, otherwise `httpBackupGo/Backups`).
-- `Retention` - number of days to keep backups (default: `30`). Note: automatic cleanup is not implemented in this release.
-- `Sites` - an array of sites to back up. Each site has `Enabled`, `Name`, and `Url` fields.
+The config file is created automatically on first start.
 
-### Example configuration
+---
+
+## ⚙️ Configuration
+
+Configuration is stored as JSON and can be edited via the Web UI or directly on disk.
+
+Example:
 
 ```json
 {
-  "WebListenAddr": "127.0.0.1:8123",
   "IntervalMinutes": 5,
-  "BackupFolder": "httpBackupGo/Backups",
+  "BackupFolder": "C:\\Backups\\httpBackupGo",
   "Retention": 30,
+  "WebListenAddr": "127.0.0.1:8123",
   "Sites": [
     {
       "Enabled": true,
-      "Name": "example-site",
-      "Url": "http://example.com/backup.zip"
+      "Name": "example1",
+      "Url": "http://localhost:81/backup.zip"
     }
   ]
 }
 ```
 
-## Web Interface
+### Fields
 
-Start the program and open the web UI at the configured `WebListenAddr` (default: `http://127.0.0.1:8123`).
+- **IntervalMinutes**  
+  Backup interval in minutes.
 
-From the UI you can:
+- **BackupFolder**  
+  Base directory where backups are stored.
 
-- View and edit the JSON-backed configuration.
-- Save changes (saves to the config file and notifies the running scheduler to reload the interval and site list).
-- Trigger an immediate run with the "Run" button.
-- Reload the scheduler manually.
+- **Retention**  
+  Maximum number of backups to keep per site.
 
-The web UI endpoints used by the app are:
+- **WebListenAddr**  
+  Address and port for the web UI  
+  (changing this requires restarting the app).
 
-- `/` - index page
-- `/save` - POST to save config (used by the UI)
-- `/run` - POST to trigger an immediate run
-- `/reload` - POST to force a scheduler/config reload
+- **Sites**  
+  List of backup targets.
 
-Config changes from the UI notify the main process so you do not need to restart the binary for most changes (the listen address itself requires restarting the service to take effect).
+---
 
-## Backup storage
+## 📂 Backup Layout
 
-Backups are saved under the configured `BackupFolder` in a subfolder per site name. Filenames follow this pattern:
+Backups are stored as:
 
-`<BackupFolder>/<SiteName>/backup_<SiteName>_DD-MM-YYYY_HH-mm-ss.zip`
+```
+<BackupFolder>/<SiteName>/backup_<SiteName>_DD-MM-YYYY_HH-mm-ss.zip
+```
 
 Example:
 
-`C:\ProgramData\httpBackupGo\Backups\example-site\backup_example-site_12-01-2026_15-04-05.zip`
+```
+httpBackupGo/artimo1/backup_artimo1_10-01-2026_21-22-34.zip
+```
 
-## Concurrency
+---
 
-The downloader runs multiple site downloads concurrently. The default maximum parallel downloads is 5. You can override this at runtime with the environment variable:
+## 🧠 How It Works
 
-- `HTTPBACKUP_MAX_PARALLEL` - set to a positive integer to change the max parallel downloads.
+### Scheduler
+- Runs on a configurable interval
+- Reloads configuration on every tick
+- Updates interval dynamically when config changes
 
-## Retention / Cleanup
+### Runner
+- Downloads enabled sites in parallel
+- Uses a configurable concurrency limit
+- Writes downloads atomically using `.tmp` files
 
-The configuration includes a `Retention` value, but automatic deletion/cleanup of old backups is not implemented in this release. The `retention/` package currently contains a placeholder.
+### Retention
+- Keeps only the newest `Retention` backups per site
+- Deletes the oldest backups first
+- Runs automatically after a successful download
 
-## Project structure
+### Web UI
+- Fully offline (Bootstrap embedded)
+- Edit configuration
+- Trigger backups manually
+- Reload scheduler instantly
+
+---
+
+## 📁 Project Structure
 
 ```
 httpBackupGo/
-├── go.mod
-├── main.go
-├── README.md
-├── backup/
+├── backup/           Download & execution logic
 │   └── runner.go
-├── config/
+├── config/           Config load/save/validation
 │   └── config.go
-├── retention/
-│   └── cleanup.go  (placeholder)
-└── web/
-    ├── server.go
-    └── static/
-        ├── bootstrap.bundle.min.js
-        └── bootstrap.min.css
-    └── templates/
-        └── index.html
+├── retention/        Retention cleanup logic
+│   └── cleanup.go
+├── web/              Web UI (handlers, templates, static)
+│   ├── server.go
+│   ├── templates/
+│   └── static/
+├── main.go           Scheduler & orchestration
+├── go.mod
+├── go.sum
+└── README.md
 ```
 
-## License
+---
 
-This project is licensed under the MIT License - see the `LICENSE` file for details.
+## 🔧 Environment Variables
+
+### HTTPBACKUP_MAX_PARALLEL
+
+Limits the number of concurrent downloads.
+
+Example:
+
+```bash
+HTTPBACKUP_MAX_PARALLEL=10 ./httpbackupgo
+```
+
+Default: `5`
+
+---
+
+## 🚫 Ignored Files
+
+The following should not be committed:
+
+- `config.json`
+- backup zip files
+- temporary files
+- logs
+- IDE / OS files
+
+See `.gitignore` in the repository.
+
+---
+
+## 🛡 Design Goals
+
+- Offline-first
+- Minimal dependencies
+- Clear separation of concerns
+- Safe concurrency (no race conditions)
+- Predictable runtime behavior
+
+---
+
+## 📜 License
+
+MIT License  
+© 2026 krootjes
