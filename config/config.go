@@ -32,8 +32,8 @@ func DefaultConfig() Config {
 		Sites: []Site{
 			{
 				Enabled: true,
-				Name:    "example",
-				Url:     "http://localhost:81/backup.zip",
+				Name:    "artimo1",
+				Url:     "http://10.225.5.11/backup.zip",
 			},
 		},
 	}
