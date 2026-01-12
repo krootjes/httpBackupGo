@@ -36,3 +36,8 @@ Thumbs.db
 # App config (runtime-generated)
 config.json
 config.json.tmp
+
+# Backup output
+httpBackupGo/Backups
+**/backup_*.zip
+**/backup_*.zip.tmp
