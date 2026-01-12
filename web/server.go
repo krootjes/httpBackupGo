@@ -64,7 +64,7 @@ func StartServer(cfgPath string) error {
 	mux.HandleFunc("/save", s.handleSave)
 	mux.HandleFunc("/run", s.handleRun)
 
-	addr := "127.0.0.1:8080"
+	addr := "127.0.0.1:8123"
 	log.Printf("web ui listening on http://%s", addr)
 
 	srv := &http.Server{
