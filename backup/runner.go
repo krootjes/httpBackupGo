@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"httpBackupGo/config"
+	"httpBackupGo/retention"
 )
 
 type Runner struct {
@@ -160,5 +161,12 @@ func (r *Runner) RunOneSite(ctx context.Context, cfg config.Config, site config.
 	}
 
 	log.Printf("backup: site=%s saved %s (%d bytes)", name, outPath, written)
+
+	// Apply retention (best-effort; never fail the backup)
+	if err := retention.CleanupSite(siteDir, name, cfg.Retention); err != nil {
+		log.Printf("retention: site=%s error: %v", name, err)
+	}
+
 	return nil
+
 }
