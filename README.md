@@ -8,30 +8,6 @@ httpBackupGo is a Go application designed to automate the backup of websites. It
 - **Configurable Settings**: Users can specify backup intervals, retention periods, and site details through a configuration file.
 - **Web Interface**: A simple web UI to manage configurations and trigger backups.
 
-## Project Structure
-
-```
-httpBackupGo/
-├── .gitattributes
-├── .gitignore
-├── go.mod
-├── main.go
-├── README.md
-├── backup/
-│   └── runner.go
-├── config/
-│   └── config.go
-├── retention/
-│   └── cleanup.go
-└── web/
-    ├── server.go
-    ├── static/
-    │   ├── bootstrap.bundle.min.js
-    │   └── bootstrap.min.css
-    └── templates/
-        └── index.html
-```
-
 ## Installation
 
 1. Clone the repository:
@@ -84,6 +60,30 @@ You can modify the configuration file to set the following parameters:
 ## Web Interface
 
 After starting the application, you can access the web interface at `http://127.0.0.1:8080`. Here, you can manage your backup configurations and trigger backups manually.
+
+## Project Structure
+
+```
+httpBackupGo/
+├── .gitattributes
+├── .gitignore
+├── go.mod
+├── main.go
+├── README.md
+├── backup/
+│   └── runner.go
+├── config/
+│   └── config.go
+├── retention/
+│   └── cleanup.go
+└── web/
+    ├── server.go
+    ├── static/
+    │   ├── bootstrap.bundle.min.js
+    │   └── bootstrap.min.css
+    └── templates/
+        └── index.html
+```
 
 ## License
 
