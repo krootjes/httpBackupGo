@@ -48,6 +48,12 @@
 
           <div class="row g-3">
             <div class="col-md-4">
+              <label class="form-label">WebListenAddr</label>
+              <input type="text" class="form-control" name="WebListenAddr" value="{{.Config.WebListenAddr}}" placeholder="127.0.0.1:8123">
+              <div class="form-text">Changing this requires restarting the app.</div>
+            </div>
+
+            <div class="col-md-4">
               <label class="form-label">IntervalMinutes</label>
               <input type="number" min="1" class="form-control" name="IntervalMinutes" value="{{.Config.IntervalMinutes}}">
             </div>

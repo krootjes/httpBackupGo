@@ -20,12 +20,18 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	cfgPath := defaultConfigPath()
+	events := make(chan web.Event, 8)
 
-	events := make(chan web.Event, 8) // buffered so UI never blocks
+	// Load initial config ONCE (also creates it if missing)
+	cfg, err := config.LoadOrCreate(cfgPath)
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+	log.Printf("config loaded from %s", cfgPath)
 
-	// Start Web UI
+	// Start Web UI (port/address comes from config; changes require restart)
 	go func() {
-		if err := web.StartServer(cfgPath, events); err != nil {
+		if err := web.StartServer(cfgPath, cfg.WebListenAddr, events); err != nil {
 			log.Fatalf("web server failed: %v", err)
 		}
 	}()
@@ -36,13 +42,6 @@ func main() {
 	// Signal handling
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
-	// Load initial config
-	cfg, err := config.LoadOrCreate(cfgPath)
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-	log.Printf("config loaded from %s", cfgPath)
 
 	intervalMin := normalizeInterval(cfg.IntervalMinutes)
 	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
@@ -65,7 +64,6 @@ func main() {
 				return
 			}
 
-			// Run backups
 			runOnce(ctx, cfgNow)
 		}()
 	}
@@ -76,6 +74,7 @@ func main() {
 			log.Printf("failed to reload config: %v", err)
 			return
 		}
+
 		newInterval := normalizeInterval(cfgNow.IntervalMinutes)
 		if newInterval != intervalMin {
 			intervalMin = newInterval

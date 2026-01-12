@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	WebListenAddr   string `json:"WebListenAddr"`
 	IntervalMinutes int    `json:"IntervalMinutes"`
 	BackupFolder    string `json:"BackupFolder"`
 	Retention       int    `json:"Retention"`
@@ -26,6 +27,7 @@ type Site struct {
 // You can tweak these defaults later without breaking the JSON schema.
 func DefaultConfig() Config {
 	return Config{
+		WebListenAddr:   "127.0.0.1:8123",
 		IntervalMinutes: 5,
 		BackupFolder:    defaultBackupFolder(),
 		Retention:       30,
@@ -117,6 +119,10 @@ func (c *Config) ValidateAndNormalize() {
 	if c.BackupFolder == "" {
 		c.BackupFolder = defaultBackupFolder()
 	}
+	c.WebListenAddr = strings.TrimSpace(c.WebListenAddr)
+	if c.WebListenAddr == "" {
+		c.WebListenAddr = "127.0.0.1:8123"
+	}
 
 	// Normalize sites: trim whitespace
 	out := make([]Site, 0, len(c.Sites))
@@ -149,10 +155,10 @@ func (c *Config) ValidateAndNormalize() {
 func defaultBackupFolder() string {
 	// Prefer ProgramData on Windows if set.
 	if pd := os.Getenv("ProgramData"); pd != "" {
-		return filepath.Join(pd, "httpBackupGo")
+		return filepath.Join(pd, "httpBackupGo/Backups")
 	}
 
 	// Otherwise, fallback to a relative folder next to the binary (safe default).
 	// Note: main.go can also pass an explicit config path and/or backup folder.
-	return "httpBackupGo"
+	return "httpBackupGo/Backups"
 }

@@ -36,7 +36,7 @@ type viewModel struct {
 	Now     string
 }
 
-func StartServer(cfgPath string, events chan<- Event) error {
+func StartServer(cfgPath string, addr string, events chan<- Event) error {
 	s := &Server{cfgPath: cfgPath, events: events}
 
 	tpl, err := template.ParseFS(templatesFS, "templates/index.html")
@@ -63,7 +63,6 @@ func StartServer(cfgPath string, events chan<- Event) error {
 	mux.HandleFunc("/run", s.handleRun)
 	mux.HandleFunc("/reload", s.handleReload)
 
-	addr := "127.0.0.1:8123"
 	log.Printf("web ui listening on http://%s", addr)
 
 	srv := &http.Server{
@@ -116,7 +115,10 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?err="+q("failed to load config: "+err.Error()), http.StatusSeeOther)
 		return
 	}
-
+	webAddr := strings.TrimSpace(r.FormValue("WebListenAddr"))
+	if webAddr != "" {
+		cfg.WebListenAddr = webAddr
+	}
 	cfg.IntervalMinutes = parseInt(r.FormValue("IntervalMinutes"), cfg.IntervalMinutes)
 	cfg.Retention = parseInt(r.FormValue("Retention"), cfg.Retention)
 
