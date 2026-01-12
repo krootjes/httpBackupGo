@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"httpBackupGo/config"
@@ -25,7 +24,7 @@ var staticFS embed.FS
 type Server struct {
 	cfgPath string
 	tpl     *template.Template
-	runNow  atomic.Int32
+	events  chan<- Event
 }
 
 type viewModel struct {
@@ -37,8 +36,8 @@ type viewModel struct {
 	Now     string
 }
 
-func StartServer(cfgPath string) error {
-	s := &Server{cfgPath: cfgPath}
+func StartServer(cfgPath string, events chan<- Event) error {
+	s := &Server{cfgPath: cfgPath, events: events}
 
 	tpl, err := template.ParseFS(templatesFS, "templates/index.html")
 	if err != nil {
@@ -48,7 +47,6 @@ func StartServer(cfgPath string) error {
 
 	mux := http.NewServeMux()
 
-	// ✅ Serve embedded static files correctly (sub-FS rooted at "static")
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		return fmt.Errorf("static fs sub: %w", err)
@@ -63,6 +61,7 @@ func StartServer(cfgPath string) error {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/save", s.handleSave)
 	mux.HandleFunc("/run", s.handleRun)
+	mux.HandleFunc("/reload", s.handleReload)
 
 	addr := "127.0.0.1:8123"
 	log.Printf("web ui listening on http://%s", addr)
@@ -176,7 +175,10 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/?msg="+q("Config saved"), http.StatusSeeOther)
+	// 🔔 Notify main immediately
+	nonBlockingSend(s.events, Event{Type: EventConfigChanged})
+
+	http.Redirect(w, r, "/?msg="+q("Config saved + scheduler reloaded"), http.StatusSeeOther)
 }
 
 func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
@@ -184,8 +186,35 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.runNow.Store(1)
-	http.Redirect(w, r, "/?msg="+q("Run requested"), http.StatusSeeOther)
+
+	// 🔔 Notify main to run immediately
+	nonBlockingSend(s.events, Event{Type: EventRunNow})
+
+	http.Redirect(w, r, "/?msg="+q("Run started"), http.StatusSeeOther)
+}
+
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 🔔 Force reload scheduler/config (useful button)
+	nonBlockingSend(s.events, Event{Type: EventConfigChanged})
+
+	http.Redirect(w, r, "/?msg="+q("Scheduler reloaded"), http.StatusSeeOther)
+}
+
+// nonBlockingSend prevents the web request from hanging if main is busy.
+// If the channel buffer is full, we just drop the event (safe).
+func nonBlockingSend(ch chan<- Event, ev Event) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- ev:
+	default:
+	}
 }
 
 func parseInt(s string, fallback int) int {
