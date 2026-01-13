@@ -153,7 +153,7 @@ func (c *Config) ValidateAndNormalize() {
 func defaultBackupFolder() string {
 	// Windows: %ProgramData%\httpBackupGo
 	if pd := os.Getenv("ProgramData"); pd != "" {
-		return filepath.Join(pd, "httpBackupGo")
+		return filepath.Join(pd, "httpBackupGo", "Backups")
 	}
 
 	// Linux / macOS: ./Backups
