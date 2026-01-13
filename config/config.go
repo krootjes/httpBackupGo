@@ -150,15 +150,12 @@ func (c *Config) ValidateAndNormalize() {
 	c.Sites = out
 }
 
-// defaultBackupFolder tries to pick a reasonable OS-specific location.
-// You can ignore this and set BackupFolder explicitly in config.json.
 func defaultBackupFolder() string {
-	// Prefer ProgramData on Windows if set.
+	// Windows: %ProgramData%\httpBackupGo
 	if pd := os.Getenv("ProgramData"); pd != "" {
-		return filepath.Join(pd, "httpBackupGo/Backups")
+		return filepath.Join(pd, "httpBackupGo")
 	}
 
-	// Otherwise, fallback to a relative folder next to the binary (safe default).
-	// Note: main.go can also pass an explicit config path and/or backup folder.
-	return "httpBackupGo/Backups"
+	// Linux / macOS: ./Backups
+	return "Backups"
 }
