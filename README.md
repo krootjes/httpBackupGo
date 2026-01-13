@@ -23,7 +23,7 @@ The application is designed to run unattended as a long-running process or servi
 - 🧠 **Atomic downloads** using temporary files
 - 📜 **Structured JSON logging** (`slog`)
 - 🪟 **Windows + Linux friendly paths**
-- 🔒 Web UI bound to `localhost` only
+- 🔒 Web UI bound to `localhost` only by default
 
 ---
 
