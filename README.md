@@ -63,7 +63,7 @@ Example `config.json`:
   "Sites": [
     {
       "Enabled": true,
-      "Name": "artimo1",
+      "Name": "site1",
       "Url": "http://localhost:81/backup.zip"
     }
   ]
@@ -101,7 +101,7 @@ Backups are written to disk as:
 Example:
 
 ```
-httpBackupGo/artimo1/backup_artimo1_10-01-2026_21-22-34.zip
+httpBackupGo/site1/backup_site1_10-01-2026_21-22-34.zip
 ```
 
 Downloads are written to a temporary `.tmp` file first and then renamed,
@@ -164,7 +164,7 @@ Example log entry:
   "time": "2026-01-13T22:41:12Z",
   "level": "INFO",
   "msg": "backup: saved",
-  "site": "artimo1",
+  "site": "site1",
   "bytes": 7340032,
   "duration_ms": 842
 }
