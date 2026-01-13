@@ -1,23 +1,29 @@
 # 🚀 httpBackupGo
 
-**A lightweight, offline-first HTTP backup scheduler & runner with a web UI — written in Go.**
+**Offline-first HTTP backup scheduler with Web UI, retention and structured logging — written in Go.**
 
-httpBackupGo periodically downloads HTTP-accessible backup files (such as `backup.zip`),
-stores them per site with timestamped filenames, and automatically enforces a retention policy.
+`httpBackupGo` periodically downloads HTTP-accessible backup files (for example `backup.zip`),
+stores them per site with timestamped filenames, enforces a retention policy, and exposes a
+local-only web interface for configuration and control.
+
+The application is designed to run unattended as a long-running process or service
+(Windows service / systemd), while remaining fully usable from a browser on `localhost`.
 
 ---
 
 ## ✨ Features
 
-- 🕒 Scheduled backups with configurable interval
-- 🌐 Offline web UI (no CDN, all assets embedded)
-- 📁 Per-site backup directories
-- 🗂 Retention policy (keep latest N backups per site)
-- ▶️ Run backups manually via UI
-- 🔄 Reload scheduler without restarting
-- ⚡ Parallel downloads using goroutines
-- 🧠 Live config reload (no restart needed for most changes)
-- 🛠 Simple JSON-based configuration
+- 🕒 **Scheduled backups** with configurable interval
+- 🌐 **Offline Web UI** (no CDN, all assets embedded)
+- 📁 **Per-site backup directories**
+- 🗂 **Retention policy** (keep last _N_ backups per site)
+- ▶️ **Run now** trigger from the UI
+- 🔄 **Live scheduler reload** when config changes
+- ⚡ **Parallel downloads** using goroutines with a concurrency limit
+- 🧠 **Atomic downloads** using temporary files
+- 📜 **Structured JSON logging** (`slog`)
+- 🪟 **Windows + Linux friendly paths**
+- 🔒 Web UI bound to `localhost` only
 
 ---
 
@@ -38,7 +44,7 @@ go build -o httpbackupgo
 http://127.0.0.1:8123
 ```
 
-The config file is created automatically on first start.
+A configuration file is created automatically on first start.
 
 ---
 
@@ -46,7 +52,7 @@ The config file is created automatically on first start.
 
 Configuration is stored as JSON and can be edited via the Web UI or directly on disk.
 
-Example:
+Example `config.json`:
 
 ```json
 {
@@ -57,27 +63,27 @@ Example:
   "Sites": [
     {
       "Enabled": true,
-      "Name": "example1",
+      "Name": "artimo1",
       "Url": "http://localhost:81/backup.zip"
     }
   ]
 }
 ```
 
-### Fields
+### Configuration fields
 
 - **IntervalMinutes**  
-  Backup interval in minutes.
+  Interval between scheduled runs (minutes).
 
 - **BackupFolder**  
-  Base directory where backups are stored.
+  Base directory where all backups are stored.
 
 - **Retention**  
-  Maximum number of backups to keep per site.
+  Number of backups to keep per site.
 
 - **WebListenAddr**  
-  Address and port for the web UI  
-  (changing this requires restarting the app).
+  Address and port for the Web UI.  
+  _Changing this requires restarting the application._
 
 - **Sites**  
   List of backup targets.
@@ -86,7 +92,7 @@ Example:
 
 ## 📂 Backup Layout
 
-Backups are stored as:
+Backups are written to disk as:
 
 ```
 <BackupFolder>/<SiteName>/backup_<SiteName>_DD-MM-YYYY_HH-mm-ss.zip
@@ -98,51 +104,70 @@ Example:
 httpBackupGo/artimo1/backup_artimo1_10-01-2026_21-22-34.zip
 ```
 
+Downloads are written to a temporary `.tmp` file first and then renamed,
+preventing partial or corrupt backups.
+
 ---
 
 ## 🧠 How It Works
 
 ### Scheduler
-- Runs on a configurable interval
+- Runs on a ticker based on `IntervalMinutes`
 - Reloads configuration on every tick
-- Updates interval dynamically when config changes
+- Updates its interval dynamically when the config changes
+- Prevents overlapping runs using an atomic guard
 
 ### Runner
-- Downloads enabled sites in parallel
-- Uses a configurable concurrency limit
-- Writes downloads atomically using `.tmp` files
+- Executes backups for all enabled sites
+- Uses goroutines with a semaphore for concurrency control
+- Each site runs independently
+- Errors in one site do not stop others
 
 ### Retention
+- Applied after each successful backup
 - Keeps only the newest `Retention` backups per site
-- Deletes the oldest backups first
-- Runs automatically after a successful download
+- Removes the oldest backups first
+- Best-effort: retention errors never fail a backup run
 
 ### Web UI
-- Fully offline (Bootstrap embedded)
+- Fully offline (embedded Bootstrap + assets)
 - Edit configuration
-- Trigger backups manually
-- Reload scheduler instantly
+- Enable/disable sites
+- Trigger immediate runs
+- Reload scheduler without restart
 
 ---
 
-## 📁 Project Structure
+## 📜 Logging
 
-```
-httpBackupGo/
-├── backup/           Download & execution logic
-│   └── runner.go
-├── config/           Config load/save/validation
-│   └── config.go
-├── retention/        Retention cleanup logic
-│   └── cleanup.go
-├── web/              Web UI (handlers, templates, static)
-│   ├── server.go
-│   ├── templates/
-│   └── static/
-├── main.go           Scheduler & orchestration
-├── go.mod
-├── go.sum
-└── README.md
+`httpBackupGo` uses structured JSON logging via `log/slog`.
+
+### Log destinations
+
+- **Windows**
+  ```
+  C:\ProgramData\httpBackupGo\log.json
+  ```
+
+- **Linux / macOS**
+  ```
+  ./log.json
+  ```
+
+Logs are also written to **stdout**, making them compatible with **journald**
+when running as a systemd service.
+
+Example log entry:
+
+```json
+{
+  "time": "2026-01-13T22:41:12Z",
+  "level": "INFO",
+  "msg": "backup: saved",
+  "site": "artimo1",
+  "bytes": 7340032,
+  "duration_ms": 842
+}
 ```
 
 ---
@@ -153,8 +178,6 @@ httpBackupGo/
 
 Limits the number of concurrent downloads.
 
-Example:
-
 ```bash
 HTTPBACKUP_MAX_PARALLEL=10 ./httpbackupgo
 ```
@@ -163,27 +186,52 @@ Default: `5`
 
 ---
 
-## 🚫 Ignored Files
+## 📁 Project Structure
 
-The following should not be committed:
+```
+httpBackupGo/
+├── backup/           Backup execution logic
+│   └── runner.go
+├── config/           Config load/save/validation
+│   └── config.go
+├── retention/        Retention cleanup logic
+│   └── cleanup.go
+├── web/              Web UI (handlers, templates, static assets)
+│   ├── server.go
+│   ├── templates/
+│   └── static/
+├── logging/          Structured logging (slog)
+│   └── logging.go
+├── main.go           Scheduler & application orchestration
+├── go.mod
+├── go.sum
+└── README.md
+```
+
+---
+
+## 🚫 Files Not Committed
+
+The following are intentionally ignored:
 
 - `config.json`
-- backup zip files
-- temporary files
-- logs
-- IDE / OS files
+- Backup zip files
+- Temporary `.tmp` files
+- Log files
+- IDE and OS artifacts
 
-See `.gitignore` in the repository.
+See `.gitignore` for details.
 
 ---
 
 ## 🛡 Design Goals
 
-- Offline-first
-- Minimal dependencies
-- Clear separation of concerns
+- Offline-first operation
+- Minimal external dependencies
+- Predictable scheduling
 - Safe concurrency (no race conditions)
-- Predictable runtime behavior
+- Clear separation of concerns
+- Production-ready defaults
 
 ---
 
