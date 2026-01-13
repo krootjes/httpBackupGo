@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,15 +45,20 @@ func (r *Runner) RunAllEnabled(ctx context.Context, cfg config.Config) {
 			sites = append(sites, s)
 		}
 	}
+
 	if len(sites) == 0 {
-		log.Println("backup: no enabled sites")
+		slog.Info("backup: no enabled sites")
 		return
 	}
 
 	sem := make(chan struct{}, r.MaxParallel)
 	var wg sync.WaitGroup
 
-	log.Printf("backup: starting run for %d site(s) (max_parallel=%d)", len(sites), r.MaxParallel)
+	slog.Info(
+		"backup: starting run",
+		"enabled_sites", len(sites),
+		"max_parallel", r.MaxParallel,
+	)
 
 	for _, site := range sites {
 		site := site // capture
@@ -67,25 +72,37 @@ func (r *Runner) RunAllEnabled(ctx context.Context, cfg config.Config) {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
+				slog.Warn("backup: run aborted by context", "site", site.Name)
 				return
 			}
 
 			if err := r.RunOneSite(ctx, cfg, site); err != nil {
-				log.Printf("backup: site=%s failed: %v", site.Name, err)
+				slog.Error(
+					"backup: site failed",
+					"site", site.Name,
+					"url", site.Url,
+					"err", err,
+				)
 			} else {
-				log.Printf("backup: site=%s OK", site.Name)
+				slog.Info(
+					"backup: site ok",
+					"site", site.Name,
+					"url", site.Url,
+				)
 			}
 		}()
 	}
 
 	wg.Wait()
-	log.Printf("backup: run finished")
+	slog.Info("backup: run finished")
 }
 
 // RunOneSite performs the actual download and saves it to:
 //
 //	<BackupFolder>/<Name>/backup_<Name>_DD-MM-YYYY_HH-mm-ss.zip
 func (r *Runner) RunOneSite(ctx context.Context, cfg config.Config, site config.Site) error {
+	start := time.Now()
+
 	name := strings.TrimSpace(site.Name)
 	if name == "" {
 		return fmt.Errorf("site name is empty")
@@ -110,6 +127,13 @@ func (r *Runner) RunOneSite(ctx context.Context, cfg config.Config, site config.
 	// Create temp file first, then rename (atomic-ish)
 	tmpPath := outPath + ".tmp"
 
+	slog.Info(
+		"backup: download started",
+		"site", name,
+		"url", url,
+		"out_path", outPath,
+	)
+
 	// Build request with context
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -133,9 +157,7 @@ func (r *Runner) RunOneSite(ctx context.Context, cfg config.Config, site config.
 	if err != nil {
 		return fmt.Errorf("create %q: %w", tmpPath, err)
 	}
-	defer func() {
-		_ = f.Close()
-	}()
+	defer func() { _ = f.Close() }()
 
 	// Stream copy
 	written, err := io.Copy(f, resp.Body)
@@ -160,13 +182,26 @@ func (r *Runner) RunOneSite(ctx context.Context, cfg config.Config, site config.
 		return fmt.Errorf("rename to final: %w", err)
 	}
 
-	log.Printf("backup: site=%s saved %s (%d bytes)", name, outPath, written)
+	slog.Info(
+		"backup: saved",
+		"site", name,
+		"url", url,
+		"path", outPath,
+		"bytes", written,
+		"status_code", resp.StatusCode,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 
 	// Apply retention (best-effort; never fail the backup)
 	if err := retention.CleanupSite(siteDir, name, cfg.Retention); err != nil {
-		log.Printf("retention: site=%s error: %v", name, err)
+		slog.Warn(
+			"retention: cleanup error",
+			"site", name,
+			"site_dir", siteDir,
+			"retention", cfg.Retention,
+			"err", err,
+		)
 	}
 
 	return nil
-
 }

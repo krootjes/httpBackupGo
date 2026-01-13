@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,10 +14,26 @@ import (
 
 	"httpBackupGo/backup"
 	"httpBackupGo/config"
+	"httpBackupGo/logging"
 	"httpBackupGo/web"
 )
 
 func main() {
+	logPath := defaultLogPath()
+
+	logger, closeLogs, err := logging.New(logging.Options{
+		FilePath: logPath,
+		ToStdout: true, // belangrijk voor journald
+		Level:    slog.LevelInfo,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer closeLogs()
+
+	slog.SetDefault(logger)
+
+	slog.Info("logging initialized", "log_path", logPath)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	cfgPath := defaultConfigPath()
@@ -27,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
-	log.Printf("config loaded from %s", cfgPath)
+	slog.Info("config loaded", "path", cfgPath)
 
 	// Start Web UI (port/address comes from config; changes require restart)
 	go func() {
@@ -46,13 +63,13 @@ func main() {
 	intervalMin := normalizeInterval(cfg.IntervalMinutes)
 	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
 	defer ticker.Stop()
-	log.Printf("scheduler started (interval=%d minutes)", intervalMin)
+	slog.Info("scheduler started", "interval_minutes", intervalMin)
 
 	var running atomic.Bool // prevents overlapping runs
 
 	triggerRun := func(reason string) {
 		if !running.CompareAndSwap(false, true) {
-			log.Printf("run skipped (%s): already running", reason)
+			slog.Warn("run skipped: already running", "reason", reason)
 			return
 		}
 		go func() {
@@ -60,7 +77,7 @@ func main() {
 
 			cfgNow, err := config.LoadOrCreate(cfgPath)
 			if err != nil {
-				log.Printf("failed to reload config: %v", err)
+				slog.Error("failed to reload config", "err", err)
 				return
 			}
 
@@ -71,7 +88,7 @@ func main() {
 	reloadTickerIfNeeded := func() {
 		cfgNow, err := config.LoadOrCreate(cfgPath)
 		if err != nil {
-			log.Printf("failed to reload config: %v", err)
+			slog.Error("failed to reload config", "err", err)
 			return
 		}
 
@@ -80,7 +97,7 @@ func main() {
 			intervalMin = newInterval
 			ticker.Stop()
 			ticker = time.NewTicker(time.Duration(intervalMin) * time.Minute)
-			log.Printf("scheduler interval updated to %d minutes", intervalMin)
+			slog.Info("scheduler interval updated", "interval_minutes", intervalMin)
 		}
 	}
 
@@ -135,4 +152,14 @@ func defaultConfigPath() string {
 		return filepath.Join(pd, "httpBackupGo", "config.json")
 	}
 	return "config.json"
+}
+
+func defaultLogPath() string {
+	// Windows: ProgramData\httpBackupGo\log.json
+	if pd := os.Getenv("ProgramData"); pd != "" {
+		return filepath.Join(pd, "httpBackupGo", "log.json")
+	}
+
+	// Linux / macOS: current working directory
+	return "log.json"
 }
