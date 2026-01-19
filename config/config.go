@@ -28,7 +28,7 @@ type Site struct {
 func DefaultConfig() Config {
 	return Config{
 		WebListenAddr:   "127.0.0.1:8123",
-		IntervalMinutes: 5,
+		IntervalMinutes: 0,
 		BackupFolder:    defaultBackupFolder(),
 		Retention:       30,
 		Sites: []Site{
