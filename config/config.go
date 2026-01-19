@@ -109,7 +109,7 @@ func Save(path string, cfg Config) error {
 // we can add a separate ValidateStrict() that returns an error.
 func (c *Config) ValidateAndNormalize() {
 	// Defaults
-	if c.IntervalMinutes <= 0 {
+	if c.IntervalMinutes < 0 {
 		c.IntervalMinutes = 1
 	}
 	if c.Retention <= 0 {

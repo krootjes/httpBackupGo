@@ -19,11 +19,12 @@ import (
 )
 
 func main() {
+	// ---- Logging (JSON) ----
 	logPath := defaultLogPath()
 
 	logger, closeLogs, err := logging.New(logging.Options{
 		FilePath: logPath,
-		ToStdout: true, // belangrijk voor journald
+		ToStdout: true, // journald-friendly
 		Level:    slog.LevelInfo,
 	})
 	if err != nil {
@@ -32,12 +33,14 @@ func main() {
 	defer closeLogs()
 
 	slog.SetDefault(logger)
-
 	slog.Info("logging initialized", "log_path", logPath)
+
+	// Optional legacy logger flags (can remove once all log.* calls are gone)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
+	// ---- Config ----
 	cfgPath := defaultConfigPath()
-	events := make(chan web.Event, 8)
+	events := make(chan web.Event, 8) // buffered so UI never blocks
 
 	// Load initial config ONCE (also creates it if missing)
 	cfg, err := config.LoadOrCreate(cfgPath)
@@ -46,32 +49,42 @@ func main() {
 	}
 	slog.Info("config loaded", "path", cfgPath)
 
-	// Start Web UI (port/address comes from config; changes require restart)
-	go func() {
-		if err := web.StartServer(cfgPath, cfg.WebListenAddr, events); err != nil {
+	// ---- Start Web UI (addr from config; changes require restart) ----
+	go func(addr string) {
+		if err := web.StartServer(cfgPath, addr, events); err != nil {
 			log.Fatalf("web server failed: %v", err)
 		}
-	}()
+	}(cfg.WebListenAddr)
 
+	// ---- Context + signal handling ----
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Signal handling
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	intervalMin := normalizeInterval(cfg.IntervalMinutes)
-	ticker := time.NewTicker(time.Duration(intervalMin) * time.Minute)
-	defer ticker.Stop()
-	slog.Info("scheduler started", "interval_minutes", intervalMin)
+	// ---- Scheduler (IntervalMinutes==0 disables auto runs) ----
+	intervalMin := normalizeInterval(cfg.IntervalMinutes) // 0 stays 0
+	var ticker *time.Ticker
+	var tickCh <-chan time.Time
 
-	var running atomic.Bool // prevents overlapping runs
+	if intervalMin > 0 {
+		ticker = time.NewTicker(time.Duration(intervalMin) * time.Minute)
+		tickCh = ticker.C
+		slog.Info("scheduler started", "interval_minutes", intervalMin)
+	} else {
+		slog.Info("scheduler disabled (IntervalMinutes=0)")
+	}
+
+	// Prevent overlapping runs
+	var running atomic.Bool
 
 	triggerRun := func(reason string) {
 		if !running.CompareAndSwap(false, true) {
 			slog.Warn("run skipped: already running", "reason", reason)
 			return
 		}
+
 		go func() {
 			defer running.Store(false)
 
@@ -93,32 +106,59 @@ func main() {
 		}
 
 		newInterval := normalizeInterval(cfgNow.IntervalMinutes)
-		if newInterval != intervalMin {
+
+		// disabled -> enabled
+		if intervalMin == 0 && newInterval > 0 {
+			ticker = time.NewTicker(time.Duration(newInterval) * time.Minute)
+			tickCh = ticker.C
 			intervalMin = newInterval
-			ticker.Stop()
-			ticker = time.NewTicker(time.Duration(intervalMin) * time.Minute)
+			slog.Info("scheduler enabled", "interval_minutes", intervalMin)
+			return
+		}
+
+		// enabled -> disabled
+		if intervalMin > 0 && newInterval == 0 {
+			if ticker != nil {
+				ticker.Stop()
+			}
+			ticker = nil
+			tickCh = nil
+			intervalMin = 0
+			slog.Info("scheduler disabled (IntervalMinutes=0)")
+			return
+		}
+
+		// enabled -> enabled (interval changed)
+		if intervalMin > 0 && newInterval > 0 && newInterval != intervalMin {
+			if ticker != nil {
+				ticker.Stop()
+			}
+			ticker = time.NewTicker(time.Duration(newInterval) * time.Minute)
+			tickCh = ticker.C
+			intervalMin = newInterval
 			slog.Info("scheduler interval updated", "interval_minutes", intervalMin)
 		}
 	}
 
+	// ---- Main loop ----
 	for {
 		select {
-		case <-ticker.C:
+		case <-tickCh:
 			triggerRun("ticker")
 
 		case ev := <-events:
 			switch ev.Type {
 			case web.EventConfigChanged:
-				log.Println("event: config changed -> reloading scheduler")
+				slog.Info("event: config changed -> reloading scheduler")
 				reloadTickerIfNeeded()
 
 			case web.EventRunNow:
-				log.Println("event: run now")
+				slog.Info("event: run now")
 				triggerRun("run-now")
 			}
 
 		case <-sig:
-			log.Println("shutdown signal received")
+			slog.Info("shutdown signal received")
 			cancel()
 			return
 
@@ -140,26 +180,30 @@ func runOnce(ctx context.Context, cfg config.Config) {
 	r.RunAllEnabled(ctx, cfg)
 }
 
+// normalizeInterval keeps 0 as "disabled" and normalizes negative values.
 func normalizeInterval(v int) int {
-	if v <= 0 {
+	if v < 0 {
 		return 1
 	}
 	return v
 }
 
 func defaultConfigPath() string {
+	// Windows: %ProgramData%\httpBackupGo\config.json
 	if pd := os.Getenv("ProgramData"); pd != "" {
 		return filepath.Join(pd, "httpBackupGo", "config.json")
 	}
+
+	// Linux / macOS: ./config.json
 	return "config.json"
 }
 
 func defaultLogPath() string {
-	// Windows: ProgramData\httpBackupGo\log.json
+	// Windows: %ProgramData%\httpBackupGo\log.json
 	if pd := os.Getenv("ProgramData"); pd != "" {
 		return filepath.Join(pd, "httpBackupGo", "log.json")
 	}
 
-	// Linux / macOS: current working directory
+	// Linux / macOS: ./log.json
 	return "log.json"
 }
