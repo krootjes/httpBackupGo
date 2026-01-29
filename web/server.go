@@ -39,9 +39,10 @@ type viewModel struct {
 func StartServer(cfgPath string, addr string, events chan<- Event) error {
 	s := &Server{cfgPath: cfgPath, events: events}
 
-	tpl, err := template.ParseFS(templatesFS, "templates/index.html")
+	// Parse ALL templates (index.html + admin.html, etc.)
+	tpl, err := template.ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
-		return fmt.Errorf("parse template: %w", err)
+		return fmt.Errorf("parse templates: %w", err)
 	}
 	s.tpl = tpl
 
@@ -58,7 +59,11 @@ func StartServer(cfgPath string, addr string, events chan<- Event) error {
 		),
 	)
 
-	mux.HandleFunc("/", s.handleIndex)
+	// Pages
+	mux.HandleFunc("/", s.handleHome)       // NEW simple page
+	mux.HandleFunc("/admin", s.handleAdmin) // OLD index moved here
+
+	// Actions (keep as-is)
 	mux.HandleFunc("/save", s.handleSave)
 	mux.HandleFunc("/run", s.handleRun)
 	mux.HandleFunc("/reload", s.handleReload)
@@ -74,7 +79,25 @@ func StartServer(cfgPath string, addr string, events chan<- Event) error {
 	return srv.ListenAndServe()
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+// NEW: simple landing page with Run button + link to /admin
+func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tpl.ExecuteTemplate(w, "index.html", nil); err != nil {
+		log.Printf("template execute error (home): %v", err)
+	}
+}
+
+// NEW: admin page (your previous index UI)
+func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -95,8 +118,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tpl.Execute(w, vm); err != nil {
-		log.Printf("template execute error: %v", err)
+	if err := s.tpl.ExecuteTemplate(w, "admin.html", vm); err != nil {
+		log.Printf("template execute error (admin): %v", err)
 	}
 }
 
@@ -106,13 +129,13 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/?err="+q("invalid form: "+err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/admin?err="+q("invalid form: "+err.Error()), http.StatusSeeOther)
 		return
 	}
 
 	cfg, err := config.LoadOrCreate(s.cfgPath)
 	if err != nil {
-		http.Redirect(w, r, "/?err="+q("failed to load config: "+err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/admin?err="+q("failed to load config: "+err.Error()), http.StatusSeeOther)
 		return
 	}
 	webAddr := strings.TrimSpace(r.FormValue("WebListenAddr"))
@@ -173,14 +196,14 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	cfg.ValidateAndNormalize()
 
 	if err := config.Save(s.cfgPath, cfg); err != nil {
-		http.Redirect(w, r, "/?err="+q("failed to save config: "+err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, "/admin?err="+q("failed to save config: "+err.Error()), http.StatusSeeOther)
 		return
 	}
 
 	// 🔔 Notify main immediately
 	nonBlockingSend(s.events, Event{Type: EventConfigChanged})
 
-	http.Redirect(w, r, "/?msg="+q("Config saved + scheduler reloaded"), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin?msg="+q("Config saved + scheduler reloaded"), http.StatusSeeOther)
 }
 
 func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +215,13 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	// 🔔 Notify main to run immediately
 	nonBlockingSend(s.events, Event{Type: EventRunNow})
 
-	http.Redirect(w, r, "/?msg="+q("Run started"), http.StatusSeeOther)
+	// If request came from homepage, send back to "/"
+	if r.URL.Query().Get("from") == "home" {
+		http.Redirect(w, r, "/?msg="+q("Run started"), http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin?msg="+q("Run started"), http.StatusSeeOther)
 }
 
 func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +233,7 @@ func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 	// 🔔 Force reload scheduler/config (useful button)
 	nonBlockingSend(s.events, Event{Type: EventConfigChanged})
 
-	http.Redirect(w, r, "/?msg="+q("Scheduler reloaded"), http.StatusSeeOther)
+	http.Redirect(w, r, "/admin?msg="+q("Scheduler reloaded"), http.StatusSeeOther)
 }
 
 // nonBlockingSend prevents the web request from hanging if main is busy.
