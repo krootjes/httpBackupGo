@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>httpBackupGo</title>
 
-  <!-- OFFLINE: served from embedded /static -->
   <link href="/static/bootstrap.min.css" rel="stylesheet">
 
   <style>
@@ -23,17 +22,15 @@
 <body class="bg-body">
   <div class="container py-4" style="max-width: 1000px;">
 
-    <!-- HEADER (identiek aan admin) -->
     <div class="d-flex align-items-center justify-content-between mb-3">
       <div class="d-flex align-items-center gap-2">
         <div>
           <h1 class="h3 mb-0">
-            <img src="/static/gologo.png" alt="Go"
-                 style="height: 28px; width: auto; opacity: 0.9;">
+            <img src="/static/gologo.png" alt="Go" style="height: 28px; width: auto; opacity: 0.9;">
             httpBackupGo
           </h1>
           <div class="text-muted small">
-            Quick backup trigger
+            Backup folder: <code>{{.Config.BackupFolder}}</code>
           </div>
         </div>
       </div>
@@ -42,10 +39,15 @@
       </div>
     </div>
 
-    <!-- CARD -->
+    {{if .Message}}
+      <div class="alert alert-success">{{.Message}}</div>
+    {{end}}
+    {{if .Error}}
+      <div class="alert alert-danger">{{.Error}}</div>
+    {{end}}
+
     <div class="card shadow-sm">
       <div class="card-body p-4">
-
         <p class="text-muted mb-4">
           Trigger an immediate backup run for all enabled sites.
         </p>
@@ -55,17 +57,14 @@
             Run backup now
           </button>
         </form>
-
       </div>
     </div>
 
     <div class="text-muted small mt-4">
-      This webserver should remain bound to <code>localhost</code>.
+      Keep this webserver bound to <code>localhost</code>. Exposing it publicly is not recommended.
     </div>
-
   </div>
 
-  <!-- OFFLINE: served from embedded /static -->
   <script src="/static/bootstrap.bundle.min.js"></script>
 </body>
 </html>

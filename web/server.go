@@ -90,8 +90,22 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfg, err := config.LoadOrCreate(s.cfgPath)
+	if err != nil {
+		http.Error(w, "failed to load config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	vm := viewModel{
+		ConfigPath: s.cfgPath,
+		Config:     cfg,
+		Now:        time.Now().Format(time.RFC3339),
+		Message:    r.URL.Query().Get("msg"),
+		Error:      r.URL.Query().Get("err"),
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tpl.ExecuteTemplate(w, "index.html", nil); err != nil {
+	if err := s.tpl.ExecuteTemplate(w, "index.html", vm); err != nil {
 		log.Printf("template execute error (home): %v", err)
 	}
 }
